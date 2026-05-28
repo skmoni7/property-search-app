@@ -20,7 +20,7 @@ export default function Dashboard() {
   }, [user])
 
   const loadLocations = async () => {
-    const locs = await getUserLocations(user!.uid)
+    const locs = await getUserLocations(user!.uid, user?.email || '')
     setLocations(locs)
   }
 
