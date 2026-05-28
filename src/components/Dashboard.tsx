@@ -1,14 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { signOut } from 'firebase/auth'
-import AddressAutocomplete from './AddressAutocomplete'
 import { auth } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { getUserLocations, createLocation, deleteLocation, getUserProfile, saveUserProfile } from '@/lib/firestore'
 import LocationWorkspace from './LocationWorkspace'
-import { Plus, LogOut, MapPin, Trash2, Home, Users, Briefcase } from 'lucide-react'
+import AddressAutocomplete from './AddressAutocomplete'
+import { Plus, LogOut, MapPin, Trash2, Home, Briefcase } from 'lucide-react'
 import type { LocationWorkspace as LW } from '@/lib/types'
-// CHANGE: Import UserProfile from firestore, not types
 import type { UserProfile } from '@/lib/firestore'
 
 export default function Dashboard() {
@@ -24,25 +23,44 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (user) {
-      loadLocations()
-      loadProfile()
+      loadInitialData()
     }
   }, [user])
 
-  const loadProfile = async () => {
-    const prof = await getUserProfile(user!.uid)
-    setProfile(prof)
+  const loadInitialData = async () => {
+    setLoadingProfile(true)
+    await Promise.all([loadProfile(), loadLocations()])
     setLoadingProfile(false)
   }
 
+  const loadProfile = async () => {
+    if (!user) return
+    const prof = await getUserProfile(user.uid)
+    setProfile(prof)
+    if (prof?.workplace1) {
+      setWorkplaceInput(prof.workplace1)
+    }
+  }
+
   const handleSaveWorkplace = async () => {
-    if (!workplaceInput.trim()) return
-    await saveUserProfile(user!.uid, { workplace1: workplaceInput.trim() })
+    if (!user || !workplaceInput.trim()) return
+    setLoadingProfile(true)
+    
+    // Pass everything required to keep the profile document robust
+    await saveUserProfile(user.uid, { 
+      uid: user.uid,
+      email: user.email || '',
+      workplace1: workplaceInput.trim(),
+      workplace2: profile?.workplace2 || ''
+    })
+    
     await loadProfile()
+    setLoadingProfile(false)
   }
 
   const loadLocations = async () => {
-    const locs = await getUserLocations(user!.uid, user?.email || '')
+    if (!user) return
+    const locs = await getUserLocations(user.uid, user.email || '')
     setLocations(locs as any)
   }
 
@@ -50,20 +68,20 @@ export default function Dashboard() {
     if (!confirm('Delete this location workspace?')) return
     await deleteLocation(id)
     if (selectedLocation?.id === id) setSelectedLocation(null)
-    loadLocations()
+    await loadLocations()
   }
 
   const handleAddLocation = async () => {
-    if (!newLocationName.trim()) return
-    await createLocation(user!.uid, newLocationName.trim())
+    if (!newLocationName.trim() || !user) return
+    await createLocation(user.uid, newLocationName.trim())
     setNewLocationName('')
     setShowAddForm(false)
-    loadLocations()
+    await loadLocations()
   }
 
   if (loadingProfile) return <div className="p-10 text-center text-gray-500">Loading your workspace...</div>
 
- // If workplace is not set, show setup screen
+  // If workplace is not set, show setup screen
   if (!profile?.workplace1) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
@@ -89,9 +107,20 @@ export default function Dashboard() {
       </div>
     )
   }
-  
+
   if (selectedLocation) {
-    return <LocationWorkspace location={selectedLocation} onBack={() => { setSelectedLocation(null); loadLocations() }} />
+    return (
+      <LocationWorkspace 
+        location={selectedLocation} 
+        onBack={async () => { 
+          setSelectedLocation(null)
+          // Crucial fix: Reload BOTH settings when returning back to dashboard to sync profile state
+          setLoadingProfile(true)
+          await Promise.all([loadProfile(), loadLocations()])
+          setLoadingProfile(false)
+        }} 
+      />
+    )
   }
 
   return (
@@ -117,23 +146,23 @@ export default function Dashboard() {
         </div>
 
         {showAddForm && (
-            <div className="bg-white rounded-xl border border-blue-200 p-4 mb-6 flex gap-3 items-center shadow-sm">
-                <MapPin className="text-blue-500" size={20} />
-                <input value={newLocationName} onChange={e => setNewLocationName(e.target.value)} placeholder="City, State" className="flex-1 border p-2 rounded" />
-                <button onClick={handleAddLocation} className="bg-blue-600 text-white px-4 py-2 rounded-lg">Add</button>
-                <button onClick={() => setShowAddForm(false)} className="text-gray-400">Cancel</button>
-            </div>
+          <div className="bg-white rounded-xl border border-blue-200 p-4 mb-6 flex gap-3 items-center shadow-sm">
+            <MapPin className="text-blue-500" size={20} />
+            <input value={newLocationName} onChange={e => setNewLocationName(e.target.value)} placeholder="City, State" className="flex-1 border p-2 rounded" />
+            <button onClick={handleAddLocation} className="bg-blue-600 text-white px-4 py-2 rounded-lg">Add</button>
+            <button onClick={() => setShowAddForm(false)} className="text-gray-400">Cancel</button>
+          </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {locations.map(loc => (
-                <div key={loc.id} onClick={() => setSelectedLocation(loc)} className="bg-white rounded-xl shadow-sm p-5 border cursor-pointer hover:border-blue-400">
-                    <div className="flex justify-between">
-                        <h3 className="font-semibold text-lg">{loc.name}</h3>
-                        <button onClick={e => { e.stopPropagation(); handleDeleteLocation(loc.id!) }} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
-                    </div>
-                </div>
-            ))}
+          {locations.map(loc => (
+            <div key={loc.id} onClick={() => setSelectedLocation(loc)} className="bg-white rounded-xl shadow-sm p-5 border cursor-pointer hover:border-blue-400">
+              <div className="flex justify-between">
+                <h3 className="font-semibold text-lg">{loc.name}</h3>
+                <button onClick={e => { e.stopPropagation(); handleDeleteLocation(loc.id!) }} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+              </div>
+            </div>
+          ))}
         </div>
       </main>
     </div>
