@@ -1,89 +1,190 @@
-import {
-  collection, addDoc, getDocs, deleteDoc, doc,
-  updateDoc, query, where, serverTimestamp, onSnapshot
-} from 'firebase/firestore'
-import { db } from './firebase'
-import type { LocationWorkspace, RentProperty, BuyProperty } from './types'
+/**
+ * firestore.ts
+ * All Firestore read/write operations for the app.
+ *
+ * Collections:
+ *   locations/         - Location workspaces (Philadelphia, Austin, etc.)
+ *   rentProperties/    - Rent listings per location
+ *   buyProperties/     - Buy listings per location
+ *   propertyCache/     - Permanent RentCast API cache (never re-fetch)
+ *   users/             - User profile (workplaces, invite settings)
+ */
 
-// ── Location Workspaces ──────────────────────────────────────────
-export async function createLocation(userId: string, name: string) {
-  return addDoc(collection(db, 'locations'), {
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+  serverTimestamp,
+  orderBy,
+  setDoc,
+} from 'firebase/firestore';
+import { db } from './firebase';
+
+// --- TYPES ---
+
+export interface LocationWorkspace {
+  id?: string;
+  name: string;
+  ownerId: string;
+  collaborators: string[];
+  createdAt?: unknown;
+}
+
+export interface RentProperty {
+  id?: string;
+  address: string;
+  price: number | null;
+  sqft: number | null;
+  distanceWork1: string | null;
+  durationWork1: string | null;
+  distanceWork2: string | null;
+  durationWork2: string | null;
+  costco: { name: string; distance: string; duration: string } | null;
+  walmart: { name: string; distance: string; duration: string } | null;
+  indianStore: { name: string; distance: string; duration: string } | null;
+  lat: number | null;
+  lng: number | null;
+  notes: string;
+  manualOverrides: Record<string, boolean>;
+  createdAt?: unknown;
+}
+
+export interface BuyProperty {
+  id?: string;
+  address: string;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+  lotSize: number | null;
+  price: number | null;
+  schoolRating: string;
+  elementarySchool: string | null;
+  middleSchool: string | null;
+  highSchool: string | null;
+  distanceWork1: string | null;
+  durationWork1: string | null;
+  distanceWork2: string | null;
+  durationWork2: string | null;
+  costco: { name: string; distance: string; duration: string } | null;
+  walmart: { name: string; distance: string; duration: string } | null;
+  indianStore: { name: string; distance: string; duration: string } | null;
+  lat: number | null;
+  lng: number | null;
+  notes: string;
+  manualOverrides: Record<string, boolean>;
+  createdAt?: unknown;
+}
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  workplace1: string;
+  workplace2: string;
+}
+
+// --- LOCATION WORKSPACES ---
+
+export async function createLocation(userId: string, name: string): Promise<string> {
+  const ref = await addDoc(collection(db, 'locations'), {
     name,
     ownerId: userId,
     collaborators: [],
     createdAt: serverTimestamp(),
-  })
+  });
+  return ref.id;
 }
 
-export async function getUserLocations(userId: string) {
-  const q = query(
-    collection(db, 'locations'),
-    where('ownerId', '==', userId)
-  )
-  const shared = query(
-    collection(db, 'locations'),
-    where('collaborators', 'array-contains', userId)
-  )
-  const [owned, sharedSnap] = await Promise.all([getDocs(q), getDocs(shared)])
-  const all = [...owned.docs, ...sharedSnap.docs]
-  return all.map(d => ({ id: d.id, ...d.data() })) as LocationWorkspace[]
+export async function getUserLocations(userId: string, userEmail: string): Promise<LocationWorkspace[]> {
+  const ownedQ = query(collection(db, 'locations'), where('ownerId', '==', userId));
+  const sharedQ = query(collection(db, 'locations'), where('collaborators', 'array-contains', userEmail));
+  const [ownedSnap, sharedSnap] = await Promise.all([getDocs(ownedQ), getDocs(sharedQ)]);
+  const results: LocationWorkspace[] = [];
+  const seen = new Set<string>();
+  [...ownedSnap.docs, ...sharedSnap.docs].forEach((d) => {
+    if (!seen.has(d.id)) {
+      seen.add(d.id);
+      results.push({ id: d.id, ...d.data() } as LocationWorkspace);
+    }
+  });
+  return results;
 }
 
-export async function inviteCollaborator(locationId: string, email: string, newCollaborators: string[]) {
-  return updateDoc(doc(db, 'locations', locationId), { collaborators: newCollaborators })
+export async function deleteLocation(locationId: string): Promise<void> {
+  await deleteDoc(doc(db, 'locations', locationId));
 }
 
-export async function deleteLocation(locationId: string) {
-  return deleteDoc(doc(db, 'locations', locationId))
+export async function inviteCollaborator(locationId: string, email: string): Promise<void> {
+  const ref = doc(db, 'locations', locationId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Location not found');
+  const current: string[] = snap.data().collaborators || [];
+  if (!current.includes(email)) {
+    await updateDoc(ref, { collaborators: [...current, email] });
+  }
 }
 
-// ── Rent Properties ──────────────────────────────────────────────
-export async function addRentProperty(locationId: string, property: Omit<RentProperty, 'id'>) {
-  return addDoc(collection(db, 'locations', locationId, 'rentProperties'), {
+// --- RENT PROPERTIES ---
+
+export async function addRentProperty(locationId: string, property: Omit<RentProperty, 'id' | 'createdAt'>): Promise<string> {
+  const ref = await addDoc(collection(db, 'locations', locationId, 'rentProperties'), {
     ...property,
     createdAt: serverTimestamp(),
-  })
+  });
+  return ref.id;
 }
 
-export function subscribeRentProperties(locationId: string, callback: (props: RentProperty[]) => void) {
-  return onSnapshot(collection(db, 'locations', locationId, 'rentProperties'), snap => {
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() })) as RentProperty[]
-    callback(data.sort((a, b) => a.mapMarker - b.mapMarker))
-  })
+export async function getRentProperties(locationId: string): Promise<RentProperty[]> {
+  const q = query(collection(db, 'locations', locationId, 'rentProperties'), orderBy('createdAt', 'asc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RentProperty));
 }
 
-export async function updateRentProperty(locationId: string, propertyId: string, updates: Partial<RentProperty>) {
-  return updateDoc(doc(db, 'locations', locationId, 'rentProperties', propertyId), updates)
+export async function updateRentProperty(locationId: string, propertyId: string, updates: Partial<RentProperty>): Promise<void> {
+  await updateDoc(doc(db, 'locations', locationId, 'rentProperties', propertyId), updates);
 }
 
-export async function deleteRentProperty(locationId: string, propertyId: string) {
-  return deleteDoc(doc(db, 'locations', locationId, 'rentProperties', propertyId))
+export async function deleteRentProperty(locationId: string, propertyId: string): Promise<void> {
+  await deleteDoc(doc(db, 'locations', locationId, 'rentProperties', propertyId));
 }
 
-// ── Buy Properties ───────────────────────────────────────────────
-export async function addBuyProperty(locationId: string, property: Omit<BuyProperty, 'id'>) {
-  return addDoc(collection(db, 'locations', locationId, 'buyProperties'), {
+// --- BUY PROPERTIES ---
+
+export async function addBuyProperty(locationId: string, property: Omit<BuyProperty, 'id' | 'createdAt'>): Promise<string> {
+  const ref = await addDoc(collection(db, 'locations', locationId, 'buyProperties'), {
     ...property,
     createdAt: serverTimestamp(),
-  })
+  });
+  return ref.id;
 }
 
-export function subscribeBuyProperties(locationId: string, callback: (props: BuyProperty[]) => void) {
-  return onSnapshot(collection(db, 'locations', locationId, 'buyProperties'), snap => {
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() })) as BuyProperty[]
-    callback(data.sort((a, b) => a.mapMarker - b.mapMarker))
-  })
+export async function getBuyProperties(locationId: string): Promise<BuyProperty[]> {
+  const q = query(collection(db, 'locations', locationId, 'buyProperties'), orderBy('createdAt', 'asc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as BuyProperty));
 }
 
-export async function updateBuyProperty(locationId: string, propertyId: string, updates: Partial<BuyProperty>) {
-  return updateDoc(doc(db, 'locations', locationId, 'buyProperties', propertyId), updates)
+export async function updateBuyProperty(locationId: string, propertyId: string, updates: Partial<BuyProperty>): Promise<void> {
+  await updateDoc(doc(db, 'locations', locationId, 'buyProperties', propertyId), updates);
 }
 
-export async function deleteBuyProperty(locationId: string, propertyId: string) {
-  return deleteDoc(doc(db, 'locations', locationId, 'buyProperties', propertyId))
+export async function deleteBuyProperty(locationId: string, propertyId: string): Promise<void> {
+  await deleteDoc(doc(db, 'locations', locationId, 'buyProperties', propertyId));
 }
 
-// ── User Workplace Config ────────────────────────────────────────
-export async function saveWorkplaceConfig(userId: string, work1Address: string, work2Address: string) {
-  return updateDoc(doc(db, 'users', userId), { work1Address, work2Address })
+// --- USER PROFILE ---
+
+export async function saveUserProfile(uid: string, profile: Partial<UserProfile>): Promise<void> {
+  await setDoc(doc(db, 'users', uid), profile, { merge: true });
+}
+
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists()) return null;
+  return snap.data() as UserProfile;
 }
