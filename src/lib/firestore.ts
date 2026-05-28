@@ -3,11 +3,11 @@
  * All Firestore read/write operations for the app.
  *
  * Collections:
- *   locations/         - Location workspaces (Philadelphia, Austin, etc.)
- *   rentProperties/    - Rent listings per location
- *   buyProperties/     - Buy listings per location
- *   propertyCache/     - Permanent RentCast API cache (never re-fetch)
- *   users/             - User profile (workplaces, invite settings)
+ * locations/         - Location workspaces (Philadelphia, Austin, etc.)
+ * rentProperties/    - Rent listings per location
+ * buyProperties/     - Buy listings per location
+ * propertyCache/     - Permanent RentCast API cache (never re-fetch)
+ * users/             - User profile (workplaces, invite settings)
  */
 
 import {
@@ -151,7 +151,6 @@ export function subscribeRentProperties(
 ) {
   const q = query(collection(db, 'locations', locationId, 'rentProperties'), orderBy('createdAt', 'asc'));
   
-  // onSnapshot sets up a continuous listener. It returns an "unsubscribe" function to prevent memory leaks.
   return onSnapshot(q, (snap) => {
     const properties = snap.docs.map((d) => ({ id: d.id, ...d.data() } as RentProperty));
     callback(properties);
@@ -211,4 +210,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
   return snap.data() as UserProfile;
+}
+
+// FIX: Added the missing getUserByEmail function requested by InviteModal.tsx
+export async function getUserByEmail(email: string): Promise<UserProfile | null> {
+  const q = query(collection(db, 'users'), where('email', '==', email));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return snap.docs[0].data() as UserProfile;
 }
