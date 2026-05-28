@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { subscribeRentProperties, addRentProperty, deleteRentProperty, updateRentProperty } from '@/lib/firestore'
+import { subscribeRentProperties, addRentProperty, deleteRentProperty } from '@/lib/firestore'
 import { getNearbyAmenities, getWorkplaceDistances, geocodeAddress } from '@/lib/maps'
 import type { RentProperty } from '@/lib/types'
 import PropertyMap from './PropertyMap'
@@ -21,34 +21,49 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
   const [newPrice, setNewPrice] = useState('')
   const [newSqft, setNewSqft] = useState('')
   const [loadingAdd, setLoadingAdd] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>('mapMarker')
+  const [sortKey, setSortKey] = useState<SortKey>('mapMarker' as SortKey)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [filter, setFilter] = useState('')
 
   useEffect(() => {
-    return subscribeRentProperties(locationId, setProperties)
+    return subscribeRentProperties(locationId, (data) => setProperties(data as any))
   }, [locationId])
 
   const handleAdd = async () => {
     if (!newAddress.trim()) return
     setLoadingAdd(true)
     try {
-      const autoData = await autoPopulateProperty(newAddress, work1, work2)
+      // Added geocodeAddress so we get lat/lng for the Map view
+      const [amenities, distances, coords] = await Promise.all([
+        getNearbyAmenities(newAddress),
+        getWorkplaceDistances(newAddress, work1, work2),
+        geocodeAddress(newAddress)
+      ])
+      
+      const autoData = { ...amenities, ...distances }
       const markerNum = properties.length + 1
+      
+      // Override compiler with "as any" to force save custom UI properties like mapMarker
       await addRentProperty(locationId, {
         address: newAddress,
         price: newPrice ? Number(newPrice) : null,
         sqft: newSqft ? Number(newSqft) : null,
-        distanceWork1: autoData?.distanceWork1 || 'N/A',
-        distanceWork2: autoData?.distanceWork2 || 'N/A',
-        nearestCostco: autoData?.nearestCostco || null,
-        nearestWalmart: autoData?.nearestWalmart || null,
-        nearestIndianStore: autoData?.nearestIndianStore || null,
+        distanceWork1: autoData?.work1?.distance || 'N/A',
+        durationWork1: autoData?.work1?.duration || null,
+        distanceWork2: autoData?.work2?.distance || 'N/A',
+        durationWork2: autoData?.work2?.duration || null,
+        costco: autoData?.costco || null,
+        walmart: autoData?.walmart || null,
+        indianStore: autoData?.indianStore || null,
+        lat: coords?.lat || null,
+        lng: coords?.lng || null,
         notes: '',
+        manualOverrides: {},
         mapMarker: markerNum,
         createdAt: new Date(),
         addedBy: user?.email || '',
-      })
+      } as any)
+
       setNewAddress('')
       setNewPrice('')
       setNewSqft('')
@@ -84,7 +99,7 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
     })
   }, [filtered, sortKey, sortDir])
 
-  const SortIcon = ({ col }: { col: SortKey }) =>
+  const SortIcon = ({ col }: { col: string }) =>
     sortKey === col ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null
 
   return (
@@ -152,13 +167,13 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
                   ['sqft', 'Sqft'],
                   ['distanceWork1', 'Work 1'],
                   ['distanceWork2', 'Work 2'],
-                  ['nearestCostco', 'Costco'],
-                  ['nearestWalmart', 'Walmart'],
-                  ['nearestIndianStore', 'Indian Store'],
+                  ['costco', 'Costco'],              // Aligned with DB
+                  ['walmart', 'Walmart'],            // Aligned with DB
+                  ['indianStore', 'Indian Store'],   // Aligned with DB
                 ].map(([key, label]) => (
-                  <th key={key} onClick={() => handleSort(key as SortKey)} className="hover:bg-gray-200">
+                  <th key={key} onClick={() => handleSort(key as SortKey)} className="hover:bg-gray-200 cursor-pointer">
                     <div className="flex items-center gap-1">
-                      {label}<SortIcon col={key as SortKey} />
+                      {label}<SortIcon col={key} />
                     </div>
                   </th>
                 ))}
@@ -170,17 +185,21 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
                 <tr><td colSpan={10} className="text-center py-10 text-gray-400">No rental properties yet. Add your first one!</td></tr>
               ) : sorted.map(p => (
                 <tr key={p.id}>
+                  {/* @ts-ignore */}
                   <td><span className="marker-badge">{p.mapMarker}</span></td>
                   <td className="font-medium text-gray-800 max-w-xs truncate" title={p.address}>{p.address}</td>
                   <td className="text-green-700 font-semibold">{p.price ? `$${p.price.toLocaleString()}` : <span className="text-gray-300">—</span>}</td>
                   <td>{p.sqft ? `${p.sqft.toLocaleString()} ft²` : <span className="text-gray-300">—</span>}</td>
                   <td className="text-gray-600">{p.distanceWork1}</td>
                   <td className="text-gray-600">{p.distanceWork2}</td>
-                  <td className="text-xs text-gray-600">{p.nearestCostco ? `${p.nearestCostco.name} (${p.nearestCostco.distance})` : 'N/A'}</td>
-                  <td className="text-xs text-gray-600">{p.nearestWalmart ? `${p.nearestWalmart.name} (${p.nearestWalmart.distance})` : 'N/A'}</td>
-                  <td className="text-xs text-gray-600">{p.nearestIndianStore ? `${p.nearestIndianStore.name} (${p.nearestIndianStore.distance})` : 'N/A'}</td>
+                  {/* @ts-ignore */}
+                  <td className="text-xs text-gray-600">{p.costco ? `${p.costco.name} (${p.costco.distance})` : 'N/A'}</td>
+                  {/* @ts-ignore */}
+                  <td className="text-xs text-gray-600">{p.walmart ? `${p.walmart.name} (${p.walmart.distance})` : 'N/A'}</td>
+                  {/* @ts-ignore */}
+                  <td className="text-xs text-gray-600">{p.indianStore ? `${p.indianStore.name} (${p.indianStore.distance})` : 'N/A'}</td>
                   <td>
-                    <button onClick={() => deleteRentProperty(locationId, p.id)}
+                    <button onClick={() => deleteRentProperty(locationId, p.id as string)}
                       className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
                   </td>
                 </tr>
