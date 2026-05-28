@@ -7,6 +7,14 @@ interface AutocompleteResult {
   display_name: string;
   lat: string;
   lon: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+  }
 }
 
 interface Props {
@@ -23,7 +31,6 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown if user clicks outside the component
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -34,7 +41,6 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Debounce and fetch autocomplete suggestions from LocationIQ
   useEffect(() => {
     if (!value.trim() || !isOpen) {
       setSuggestions([])
@@ -43,14 +49,12 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
 
     const delayDebounce = setTimeout(async () => {
       const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY
-      if (!apiKey) {
-        console.warn('LocationIQ API key missing from environment variables.')
-        return
-      }
+      if (!apiKey) return
 
       setLoading(true)
       try {
-        const url = `https://api.locationiq.com/v1/autocomplete?key=${apiKey}&q=${encodeURIComponent(value)}&limit=5&dedupe=1`
+        // Adding &normalize=1 helps separate address tokens neatly
+        const url = `https://api.locationiq.com/v1/autocomplete?key=${apiKey}&q=${encodeURIComponent(value)}&limit=5&dedupe=1&normalize=1`
         const res = await fetch(url)
         if (res.ok) {
           const data = await res.json()
@@ -63,13 +67,38 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
       } finally {
         setLoading(false)
       }
-    }, 400) // 400ms debounce buffer to save API requests while typing
+    }, 400)
 
     return () => clearTimeout(delayDebounce)
   }, [value, isOpen])
 
+  /**
+   * Cleans and builds a compact address string, completely ignoring Counties
+   */
+  const getCleanAddressString = (item: AutocompleteResult): string => {
+    if (!item.display_name) return ''
+    
+    // Split the address components by comma
+    const parts = item.display_name.split(',')
+    
+    const filteredParts = parts
+      .map(part => part.trim())
+      .filter(part => {
+        const lower = part.toLowerCase()
+        // Filter out county, region, and USA labels
+        return (
+          !lower.includes('county') && 
+          !lower.includes('parish') &&
+          lower !== 'usa' && 
+          lower !== 'united states'
+        );
+      })
+
+    return filteredParts.join(', ')
+  }
+
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full text-left">
       <input
         value={value}
         onChange={(e) => {
@@ -78,7 +107,7 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
         }}
         onFocus={() => setIsOpen(true)}
         placeholder={placeholder || "Start typing an address..."}
-        className={className || "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"}
+        className={className || "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 bg-white"}
       />
       
       {loading && (
@@ -89,21 +118,24 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
 
       {isOpen && suggestions.length > 0 && (
         <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1 rounded-lg shadow-lg max-h-60 overflow-y-auto text-sm">
-          {suggestions.map((item) => (
-            <li
-              key={item.place_id}
-              onClick={() => {
-                const latNum = item.lat ? parseFloat(item.lat) : null
-                const lngNum = item.lon ? parseFloat(item.lon) : null
-                onSelect(item.display_name, latNum, lngNum)
-                setIsOpen(false)
-              }}
-              className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-start gap-2 border-b last:border-0 text-gray-700"
-            >
-              <MapPin size={16} className="text-gray-400 mt-0.5 shrink-0" />
-              <span className="truncate">{item.display_name}</span>
-            </li>
-          ))}
+          {suggestions.map((item) => {
+            const cleanedAddress = getCleanAddressString(item)
+            return (
+              <li
+                key={item.place_id}
+                onClick={() => {
+                  const latNum = item.lat ? parseFloat(item.lat) : null
+                  const lngNum = item.lon ? parseFloat(item.lon) : null
+                  onSelect(cleanedAddress, latNum, lngNum)
+                  setIsOpen(false)
+                }}
+                className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-start gap-2 border-b last:border-0 text-gray-700"
+              >
+                <MapPin size={16} className="text-gray-400 mt-0.5 shrink-0" />
+                <span className="truncate">{cleanedAddress}</span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

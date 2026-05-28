@@ -38,3 +38,28 @@ export async function deleteBuyProperty(locationId: string, propertyId: string):
 export async function saveUserProfile(uid: string, profile: Partial<UserProfile>): Promise<void> { await setDoc(doc(db, 'users', uid), profile, { merge: true }); }
 export async function getUserProfile(uid: string): Promise<UserProfile | null> { const snap = await getDoc(doc(db, 'users', uid)); if (!snap.exists()) return null; return snap.data() as UserProfile; }
 export async function getUserByEmail(email: string): Promise<UserProfile | null> { const q = query(collection(db, 'users'), where('email', '==', email)); const snap = await getDocs(q); if (snap.empty) return null; return snap.docs[0].data() as UserProfile; }
+// --- DYNAMIC INLINE UPDATE HELPERS ---
+export async function updateRentPropertyField(
+  locationId: string, 
+  propertyId: string, 
+  fields: Record<string, any>
+): Promise<void> {
+  const ref = doc(db, 'locations', locationId, 'rentProperties', propertyId);
+  await updateDoc(ref, {
+    ...fields,
+    // Track that this field was manually updated via the UI
+    [`manualOverrides.${Object.keys(fields)[0]}`]: true
+  });
+}
+
+export async function updateBuyPropertyField(
+  locationId: string, 
+  propertyId: string, 
+  fields: Record<string, any>
+): Promise<void> {
+  const ref = doc(db, 'locations', locationId, 'buyProperties', propertyId);
+  await updateDoc(ref, {
+    ...fields,
+    [`manualOverrides.${Object.keys(fields)[0]}`]: true
+  });
+}

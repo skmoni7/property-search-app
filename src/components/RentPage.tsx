@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { subscribeRentProperties, addRentProperty, deleteRentProperty } from '@/lib/firestore'
+import { subscribeRentProperties, addRentProperty, deleteRentProperty, updateRentPropertyField } from '@/lib/firestore'
 import { getNearbyAmenities, getWorkplaceDistances, geocodeAddress } from '@/lib/maps'
 import type { RentProperty } from '@/lib/types'
 import PropertyMap from './PropertyMap'
 import AddressAutocomplete from './AddressAutocomplete'
+import InlineCell from './InlineCell'
 import { Plus, Trash2, Map, Table, Loader2, ChevronUp, ChevronDown, Search } from 'lucide-react'
 
 interface Props { locationId: string; work1: string; work2: string }
@@ -41,12 +42,11 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
         getWorkplaceDistances(newAddress, work1, work2)
       ])
 
-      // Fallback to Google Geocoding only if LocationIQ didn't return coordinates
       if (!coords) {
         try {
           coords = await geocodeAddress(newAddress)
         } catch (e) {
-          console.error("Google geocoding fallback failed:", e)
+          console.error("Geocoding fallback failed:", e)
         }
       }
       
@@ -57,9 +57,9 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
         address: newAddress,
         price: newPrice ? Number(newPrice) : null,
         sqft: newSqft ? Number(newSqft) : null,
-        distanceWork1: autoData?.work1?.distance || 'N/A',
+        distanceWork1: autoData?.work1 ? `${autoData.work1.distance} (${autoData.work1.duration})` : 'N/A',
         durationWork1: autoData?.work1?.duration || null,
-        distanceWork2: autoData?.work2?.distance || 'N/A',
+        distanceWork2: autoData?.work2 ? `${autoData.work2.distance} (${autoData.work2.duration})` : 'N/A',
         durationWork2: autoData?.work2?.duration || null,
         costco: autoData?.costco || null,
         walmart: autoData?.walmart || null,
@@ -201,11 +201,17 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
                 <tr><td colSpan={10} className="text-center py-10 text-gray-400">No rental properties yet. Add your first one!</td></tr>
               ) : sorted.map(p => (
                 <tr key={p.id}>
-                  {/* @ts-ignore */}
                   <td><span className="marker-badge">{p.mapMarker}</span></td>
                   <td className="font-medium text-gray-800 max-w-xs truncate" title={p.address}>{p.address}</td>
-                  <td className="text-green-700 font-semibold">{p.price ? `$${p.price.toLocaleString()}` : <span className="text-gray-300">—</span>}</td>
-                  <td>{p.sqft ? `${p.sqft.toLocaleString()} ft²` : <span className="text-gray-300">—</span>}</td>
+                  
+                  {/* Editable Cells via InlineCell */}
+                  <td className="text-green-700 font-semibold">
+                    <InlineCell value={p.price} type="number" onSave={async (val) => await updateRentPropertyField(locationId, p.id!, { price: val ? Number(val) : null })} />
+                  </td>
+                  <td>
+                    <InlineCell value={p.sqft} type="number" onSave={async (val) => await updateRentPropertyField(locationId, p.id!, { sqft: val ? Number(val) : null })} />
+                  </td>
+                  
                   <td className="text-gray-600">{p.distanceWork1}</td>
                   <td className="text-gray-600">{p.distanceWork2}</td>
                   {/* @ts-ignore */}

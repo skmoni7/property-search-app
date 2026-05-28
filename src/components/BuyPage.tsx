@@ -1,13 +1,14 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { subscribeBuyProperties, addBuyProperty, deleteBuyProperty } from '@/lib/firestore'
+import { subscribeBuyProperties, addBuyProperty, deleteBuyProperty, updateBuyPropertyField } from '@/lib/firestore'
 import { getNearbyAmenities, getWorkplaceDistances, geocodeAddress } from '@/lib/maps'
 import { getPropertyDetails } from '@/lib/propertyData'
 import { getNearbySchools } from '@/lib/schools'
 import type { BuyProperty } from '@/lib/types'
 import PropertyMap from './PropertyMap'
 import AddressAutocomplete from './AddressAutocomplete'
+import InlineCell from './InlineCell'
 import { Plus, Trash2, Map, Table, Loader2, ChevronUp, ChevronDown, Search, School } from 'lucide-react'
 
 interface Props { locationId: string; work1: string; work2: string }
@@ -42,12 +43,11 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
         getPropertyDetails(newAddress),
       ])
       
-      // Fallback to Google Geocoding only if LocationIQ didn't return coordinates
       if (!coords) {
         try {
           coords = await geocodeAddress(newAddress)
         } catch (e) {
-          console.error("Google geocoding fallback failed:", e)
+          console.error("Geocoding fallback failed:", e)
         }
       }
       
@@ -72,9 +72,9 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
         elementarySchool: null,
         middleSchool: null,
         highSchool: null,
-        distanceWork1: autoData?.work1?.distance || 'N/A',
+        distanceWork1: autoData?.work1 ? `${autoData.work1.distance} (${autoData.work1.duration})` : 'N/A',
         durationWork1: autoData?.work1?.duration || null,
-        distanceWork2: autoData?.work2?.distance || 'N/A',
+        distanceWork2: autoData?.work2 ? `${autoData.work2.distance} (${autoData.work2.duration})` : 'N/A',
         durationWork2: autoData?.work2?.duration || null,
         costco: autoData?.costco || null,
         walmart: autoData?.walmart || null,
@@ -104,7 +104,7 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
   const filtered = useMemo(() => {
     const f = filter.toLowerCase()
     return properties.filter(p => {
-      // @ts-ignore - dynamic key access
+      // @ts-ignore
       const rating = p.schoolRating || p.schoolRatings;
       return !f || p.address.toLowerCase().includes(f) ||
       String(p.price).includes(f) ||
@@ -204,20 +204,32 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
                 <tr><td colSpan={14} className="text-center py-10 text-gray-400">No homes added yet. Add an address to auto-populate all details!</td></tr>
               ) : sorted.map(p => (
                 <tr key={p.id}>
-                  {/* @ts-ignore */}
                   <td><span className="marker-badge">{p.mapMarker}</span></td>
                   <td className="font-medium text-gray-800 max-w-xs truncate" title={p.address}>{p.address}</td>
-                  <td className="text-green-700 font-semibold">{p.price ? `$${p.price.toLocaleString()}` : '—'}</td>
-                  <td>{p.beds ?? '—'}</td>
-                  <td>{p.baths ?? '—'}</td>
-                  <td>{p.sqft ? `${p.sqft.toLocaleString()} ft²` : '—'}</td>
-                  <td>{p.lotSize ? `${p.lotSize} ac` : '—'}</td>
-                  <td>
-                    <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 text-xs font-mono px-2 py-0.5 rounded-full border border-yellow-200">
-                      {/* @ts-ignore */}
-                      <School size={10} /> {p.schoolRating || p.schoolRatings || '-/-/-'}
-                    </span>
+                  
+                  {/* Editable Fields via InlineCell */}
+                  <td className="text-green-700 font-semibold">
+                    <InlineCell value={p.price} type="number" onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { price: val ? Number(val) : null })} />
                   </td>
+                  <td>
+                    <InlineCell value={p.beds} type="number" onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { beds: val ? Number(val) : null })} />
+                  </td>
+                  <td>
+                    <InlineCell value={p.baths} type="number" onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { baths: val ? Number(val) : null })} />
+                  </td>
+                  <td>
+                    <InlineCell value={p.sqft} type="number" onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { sqft: val ? Number(val) : null })} />
+                  </td>
+                  <td>
+                    <InlineCell value={p.lotSize} type="number" onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { lotSize: val ? Number(val) : null })} />
+                  </td>
+                  <td>
+                    <div className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 text-xs font-mono px-2 py-0.5 rounded-full border border-yellow-200 w-full">
+                      <School size={10} className="shrink-0" />
+                      <InlineCell value={p.schoolRating || '-/-/-'} onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { schoolRating: val })} />
+                    </div>
+                  </td>
+                  
                   <td className="text-gray-600">{p.distanceWork1}</td>
                   <td className="text-gray-600">{p.distanceWork2}</td>
                   {/* @ts-ignore */}
