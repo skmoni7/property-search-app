@@ -6,7 +6,9 @@ import { useAuth } from '@/context/AuthContext'
 import { getUserLocations, createLocation, deleteLocation, getUserProfile, saveUserProfile } from '@/lib/firestore'
 import LocationWorkspace from './LocationWorkspace'
 import { Plus, LogOut, MapPin, Trash2, Home, Users, Briefcase } from 'lucide-react'
-import type { LocationWorkspace as LW, UserProfile } from '@/lib/types'
+import type { LocationWorkspace as LW } from '@/lib/types'
+// CHANGE: Import UserProfile from firestore, not types
+import type { UserProfile } from '@/lib/firestore'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -15,7 +17,6 @@ export default function Dashboard() {
   const [newLocationName, setNewLocationName] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   
-  // New State for Workplace setup
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [workplaceInput, setWorkplaceInput] = useState('')
@@ -44,9 +45,22 @@ export default function Dashboard() {
     setLocations(locs as any)
   }
 
-  // --- RENDERING ---
+  const handleDeleteLocation = async (id: string) => {
+    if (!confirm('Delete this location workspace?')) return
+    await deleteLocation(id)
+    if (selectedLocation?.id === id) setSelectedLocation(null)
+    loadLocations()
+  }
 
-  if (loadingProfile) return <div className="p-10 text-center">Loading...</div>
+  const handleAddLocation = async () => {
+    if (!newLocationName.trim()) return
+    await createLocation(user!.uid, newLocationName.trim())
+    setNewLocationName('')
+    setShowAddForm(false)
+    loadLocations()
+  }
+
+  if (loadingProfile) return <div className="p-10 text-center text-gray-500">Loading your workspace...</div>
 
   // If workplace is not set, show setup screen
   if (!profile?.workplace1) {
@@ -55,7 +69,7 @@ export default function Dashboard() {
         <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-100 max-w-md w-full">
           <Briefcase className="text-blue-600 mb-4" size={32} />
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome!</h2>
-          <p className="text-gray-600 mb-6">Enter your primary workplace address to calculate your commute for all future property searches.</p>
+          <p className="text-gray-600 mb-6">Enter your primary workplace address to calculate your commute.</p>
           <input
             className="w-full border border-gray-300 rounded-lg px-4 py-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
             placeholder="e.g. 541 Jefferson St, Bridgeport, PA"
@@ -94,12 +108,25 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Workspace List rendering... */}
-        {locations.map(loc => (
-            <div key={loc.id} onClick={() => setSelectedLocation(loc)} className="bg-white rounded-xl shadow-sm p-5 border cursor-pointer hover:border-blue-400">
-                <h3 className="font-semibold text-lg">{loc.name}</h3>
+        {showAddForm && (
+            <div className="bg-white rounded-xl border border-blue-200 p-4 mb-6 flex gap-3 items-center shadow-sm">
+                <MapPin className="text-blue-500" size={20} />
+                <input value={newLocationName} onChange={e => setNewLocationName(e.target.value)} placeholder="City, State" className="flex-1 border p-2 rounded" />
+                <button onClick={handleAddLocation} className="bg-blue-600 text-white px-4 py-2 rounded-lg">Add</button>
+                <button onClick={() => setShowAddForm(false)} className="text-gray-400">Cancel</button>
             </div>
-        ))}
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {locations.map(loc => (
+                <div key={loc.id} onClick={() => setSelectedLocation(loc)} className="bg-white rounded-xl shadow-sm p-5 border cursor-pointer hover:border-blue-400">
+                    <div className="flex justify-between">
+                        <h3 className="font-semibold text-lg">{loc.name}</h3>
+                        <button onClick={e => { e.stopPropagation(); handleDeleteLocation(loc.id!) }} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+                    </div>
+                </div>
+            ))}
+        </div>
       </main>
     </div>
   )
