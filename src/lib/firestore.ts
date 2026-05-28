@@ -23,6 +23,7 @@ import {
   serverTimestamp,
   orderBy,
   setDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -144,6 +145,18 @@ export async function getRentProperties(locationId: string): Promise<RentPropert
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RentProperty));
 }
+export function subscribeRentProperties(
+  locationId: string, 
+  callback: (properties: RentProperty[]) => void
+) {
+  const q = query(collection(db, 'locations', locationId, 'rentProperties'), orderBy('createdAt', 'asc'));
+  
+  // onSnapshot sets up a continuous listener. It returns an "unsubscribe" function to prevent memory leaks.
+  return onSnapshot(q, (snap) => {
+    const properties = snap.docs.map((d) => ({ id: d.id, ...d.data() } as RentProperty));
+    callback(properties);
+  });
+}
 
 export async function updateRentProperty(locationId: string, propertyId: string, updates: Partial<RentProperty>): Promise<void> {
   await updateDoc(doc(db, 'locations', locationId, 'rentProperties', propertyId), updates);
@@ -167,6 +180,17 @@ export async function getBuyProperties(locationId: string): Promise<BuyProperty[
   const q = query(collection(db, 'locations', locationId, 'buyProperties'), orderBy('createdAt', 'asc'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as BuyProperty));
+}
+export function subscribeBuyProperties(
+  locationId: string, 
+  callback: (properties: BuyProperty[]) => void
+) {
+  const q = query(collection(db, 'locations', locationId, 'buyProperties'), orderBy('createdAt', 'asc'));
+  
+  return onSnapshot(q, (snap) => {
+    const properties = snap.docs.map((d) => ({ id: d.id, ...d.data() } as BuyProperty));
+    callback(properties);
+  });
 }
 
 export async function updateBuyProperty(locationId: string, propertyId: string, updates: Partial<BuyProperty>): Promise<void> {
