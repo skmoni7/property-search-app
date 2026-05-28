@@ -28,8 +28,6 @@ export interface PlaceResult {
 /**
  * Sanitizes long LocationIQ descriptive string returns so secondary 
  * API lookup formats don't choke.
- * e.g., "2601, Scofield Ridge Parkway, Austin, Travis County, Texas, 78727, USA"
- * turns into: "2601 Scofield Ridge Parkway Austin Texas 78727"
  */
 export function cleanAddressForAPIs(address: string): string {
   if (!address) return '';
@@ -47,7 +45,6 @@ export function cleanAddressForAPIs(address: string): string {
  */
 export async function geocodeAddress(address: string): Promise<LatLng | null> {
   if (!LOCATIONIQ_API_KEY) {
-    console.warn('LocationIQ key missing. Falling back to Google Geocoding.');
     return geocodeAddressWithGoogle(address);
   }
   try {
@@ -124,7 +121,6 @@ export async function getDistanceToAddress(
   origin: string,
   destination: string
 ): Promise<DistanceResult | null> {
-  // Try using coordinate calculation via LocationIQ first to protect bill lines
   try {
     const [origC, destC] = await Promise.all([geocodeAddress(origin), geocodeAddress(destination)]);
     if (origC && destC) {
@@ -156,9 +152,8 @@ export async function getDistanceToAddress(
 }
 
 /**
- * Find the nearest store of a given type near a lat/lng location.
- * Uses Places Nearby Search API.
- * storeType: 'costco' | 'walmart' | 'indian grocery'
+ * Find the nearest store using Google's reliable Text Search API.
+ * This completely prevents failures caused by strict geolocation filters.
  */
 export async function findNearestStore(
   location: LatLng,
@@ -167,16 +162,18 @@ export async function findNearestStore(
 ): Promise<PlaceResult | null> {
   if (!GOOGLE_API_KEY) return null;
   try {
-    // Places Nearby Search
-    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&rankby=distance&keyword=${encodeURIComponent(storeKeyword)}&key=${GOOGLE_API_KEY}`;
+    const cleanAddr = cleanAddressForAPIs(originAddress);
+    // Rebuilt using textsearch: combines keyword and clean location context seamlessly
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(storeKeyword + ' near ' + cleanAddr)}&location=${location.lat},${location.lng}&radius=50000&key=${GOOGLE_API_KEY}`;
+    
     const res = await fetch(url);
     const data = await res.json();
     const place = data.results?.[0];
     if (!place) return null;
 
-    const placeAddress = place.vicinity || place.formatted_address || '';
+    const placeAddress = place.formatted_address || place.vicinity || '';
 
-    // Get driving distance from property to the store using coordinate matching to bypass Google Matrix costs
+    // Calculate actual driving times for your summary columns
     let dist: DistanceResult | null = null;
     if (place.geometry?.location) {
       dist = await getDistanceToAddressCoords(location, {
@@ -243,7 +240,6 @@ export async function getWorkplaceDistances(
     console.warn("LocationIQ workspace routing failed, using default text matching.", err);
   }
 
-  // Final fallback string handler
   const [work1, work2] = await Promise.all([
     workplace1 ? getDistanceToAddress(propertyAddress, workplace1) : Promise.resolve(null),
     workplace2 ? getDistanceToAddress(propertyAddress, workplace2) : Promise.resolve(null),
