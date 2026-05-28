@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Briefcase, X } from 'lucide-react'
+import AddressAutocomplete from './AddressAutocomplete'
 
 interface Props {
   initialWork1: string
@@ -23,27 +24,33 @@ export default function WorkplaceSetup({ initialWork1, initialWork2, onSave, onC
           </div>
           <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
         </div>
+        
         <div className="p-5 space-y-4">
           <p className="text-sm text-gray-500">These addresses will be used to auto-calculate commute distances for every property you add.</p>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Workplace 1 Address</label>
-            <input
-              value={work1} onChange={e => setWork1(e.target.value)}
+            <AddressAutocomplete
+              value={work1}
+              onChange={(val) => setWork1(val)}
+              onSelect={(addr) => setWork1(addr)}
               placeholder="e.g. 1 Microsoft Way, Redmond, WA"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Workplace 2 Address (optional)</label>
-            <input
-              value={work2} onChange={e => setWork2(e.target.value)}
+            <AddressAutocomplete
+              value={work2}
+              onChange={(val) => setWork2(val)}
+              onSelect={(addr) => setWork2(addr)}
               placeholder="e.g. 400 Broad St, Seattle, WA"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          
           <button
             onClick={() => onSave(work1, work2)}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
+            className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 mt-2"
           >
             Save Workplaces
           </button>

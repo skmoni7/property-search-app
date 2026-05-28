@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { signOut } from 'firebase/auth'
+import AddressAutocomplete from './AddressAutocomplete'
 import { auth } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { getUserLocations, createLocation, deleteLocation, getUserProfile, saveUserProfile } from '@/lib/firestore'
@@ -62,7 +63,7 @@ export default function Dashboard() {
 
   if (loadingProfile) return <div className="p-10 text-center text-gray-500">Loading your workspace...</div>
 
-  // If workplace is not set, show setup screen
+ // If workplace is not set, show setup screen
   if (!profile?.workplace1) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
@@ -70,18 +71,25 @@ export default function Dashboard() {
           <Briefcase className="text-blue-600 mb-4" size={32} />
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome!</h2>
           <p className="text-gray-600 mb-6">Enter your primary workplace address to calculate your commute.</p>
-          <input
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
-            placeholder="e.g. 541 Jefferson St, Bridgeport, PA"
-            value={workplaceInput}
-            onChange={(e) => setWorkplaceInput(e.target.value)}
-          />
-          <button onClick={handleSaveWorkplace} className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">Save Workplace</button>
+          
+          <div className="mb-4">
+            <AddressAutocomplete
+              value={workplaceInput}
+              onChange={(val) => setWorkplaceInput(val)}
+              onSelect={(addr) => setWorkplaceInput(addr)}
+              placeholder="e.g. 541 Jefferson St, Bridgeport, PA"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+            />
+          </div>
+
+          <button onClick={handleSaveWorkplace} className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">
+            Save Workplace
+          </button>
         </div>
       </div>
     )
   }
-
+  
   if (selectedLocation) {
     return <LocationWorkspace location={selectedLocation} onBack={() => { setSelectedLocation(null); loadLocations() }} />
   }
