@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { subscribeRentProperties, addRentProperty, deleteRentProperty, updateRentProperty } from '@/lib/firestore'
-import { autoPopulateProperty } from '@/lib/maps'
+import { getNearbyAmenities, getWorkplaceDistances, geocodeAddress } from '@/lib/maps'
 import type { RentProperty } from '@/lib/types'
 import PropertyMap from './PropertyMap'
 import { Plus, Trash2, Map, Table, Loader2, ChevronUp, ChevronDown, Search } from 'lucide-react'
