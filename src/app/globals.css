@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: #f8fafc;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.property-table th {
+  @apply bg-gray-100 text-gray-700 font-semibold text-sm px-3 py-2 text-left whitespace-nowrap cursor-pointer select-none;
+}
+
+.property-table td {
+  @apply text-sm px-3 py-2 border-b border-gray-100 whitespace-nowrap;
+}
+
+.property-table tr:hover td {
+  @apply bg-blue-50;
+}
+
+.marker-badge {
+  @apply inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold;
+}
