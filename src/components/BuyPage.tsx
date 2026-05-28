@@ -7,6 +7,7 @@ import { getPropertyDetails } from '@/lib/propertyData'
 import { getNearbySchools } from '@/lib/schools'
 import type { BuyProperty } from '@/lib/types'
 import PropertyMap from './PropertyMap'
+import AddressAutocomplete from './AddressAutocomplete'
 import { Plus, Trash2, Map, Table, Loader2, ChevronUp, ChevronDown, Search, School } from 'lucide-react'
 
 interface Props { locationId: string; work1: string; work2: string }
@@ -19,6 +20,7 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
   const [view, setView] = useState<'table' | 'map'>('table')
   const [adding, setAdding] = useState(false)
   const [newAddress, setNewAddress] = useState('')
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number | null; lng: number | null } | null>(null)
   const [loadingAdd, setLoadingAdd] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('mapMarker' as SortKey)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -32,12 +34,22 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
     if (!newAddress.trim()) return
     setLoadingAdd(true)
     try {
-      const [amenities, distances, propDetails, coords] = await Promise.all([
+      let coords = selectedCoords
+
+      const [amenities, distances, propDetails] = await Promise.all([
         getNearbyAmenities(newAddress),
         getWorkplaceDistances(newAddress, work1, work2),
         getPropertyDetails(newAddress),
-        geocodeAddress(newAddress),
       ])
+      
+      // Fallback to Google Geocoding only if LocationIQ didn't return coordinates
+      if (!coords) {
+        try {
+          coords = await geocodeAddress(newAddress)
+        } catch (e) {
+          console.error("Google geocoding fallback failed:", e)
+        }
+      }
       
       const autoData = { ...amenities, ...distances }
 
@@ -49,7 +61,6 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
 
       const markerNum = properties.length + 1
       
-      // Override compiler with "as any" to force save custom UI properties like mapMarker
       await addBuyProperty(locationId, {
         address: newAddress,
         beds: propDetails?.beds || null,
@@ -77,6 +88,7 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
       } as any) 
       
       setNewAddress('')
+      setSelectedCoords(null)
       setAdding(false)
     } catch (e) {
       console.error(e)
@@ -139,9 +151,15 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[250px]">
             <label className="block text-xs font-medium text-gray-600 mb-1">Property Address *</label>
-            <input value={newAddress} onChange={e => setNewAddress(e.target.value)}
+            <AddressAutocomplete
+              value={newAddress}
+              onChange={(val) => setNewAddress(val)}
+              onSelect={(addr, lat, lng) => {
+                setNewAddress(addr)
+                setSelectedCoords({ lat, lng })
+              }}
               placeholder="456 Oak Ave, Austin, TX 78701"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            />
           </div>
           <div className="text-xs text-gray-400 flex items-center gap-1">
             <School size={12} /> Beds/Baths/Price/Schools auto-fetched
@@ -167,12 +185,12 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
                   ['baths', 'Baths'],
                   ['sqft', 'Sqft'],
                   ['lotSize', 'Lot (ac)'],
-                  ['schoolRating', 'Schools E/M/H'], // Aligned with DB
+                  ['schoolRating', 'Schools E/M/H'], 
                   ['distanceWork1', 'Work 1'],
                   ['distanceWork2', 'Work 2'],
-                  ['costco', 'Costco'],              // Aligned with DB
-                  ['walmart', 'Walmart'],            // Aligned with DB
-                  ['indianStore', 'Indian Store'],   // Aligned with DB
+                  ['costco', 'Costco'],             
+                  ['walmart', 'Walmart'],            
+                  ['indianStore', 'Indian Store'],   
                 ].map(([key, label]) => (
                   <th key={key} onClick={() => handleSort(key as SortKey)} className="hover:bg-gray-200 cursor-pointer">
                     <div className="flex items-center gap-1">{label}<SortIcon col={key} /></div>
@@ -186,7 +204,7 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
                 <tr><td colSpan={14} className="text-center py-10 text-gray-400">No homes added yet. Add an address to auto-populate all details!</td></tr>
               ) : sorted.map(p => (
                 <tr key={p.id}>
-                  {/* @ts-ignore - dynamic key access */}
+                  {/* @ts-ignore */}
                   <td><span className="marker-badge">{p.mapMarker}</span></td>
                   <td className="font-medium text-gray-800 max-w-xs truncate" title={p.address}>{p.address}</td>
                   <td className="text-green-700 font-semibold">{p.price ? `$${p.price.toLocaleString()}` : '—'}</td>

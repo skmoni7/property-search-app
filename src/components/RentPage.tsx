@@ -5,10 +5,10 @@ import { subscribeRentProperties, addRentProperty, deleteRentProperty } from '@/
 import { getNearbyAmenities, getWorkplaceDistances, geocodeAddress } from '@/lib/maps'
 import type { RentProperty } from '@/lib/types'
 import PropertyMap from './PropertyMap'
+import AddressAutocomplete from './AddressAutocomplete'
 import { Plus, Trash2, Map, Table, Loader2, ChevronUp, ChevronDown, Search } from 'lucide-react'
 
 interface Props { locationId: string; work1: string; work2: string }
-
 type SortKey = keyof RentProperty
 type SortDir = 'asc' | 'desc'
 
@@ -18,6 +18,7 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
   const [view, setView] = useState<'table' | 'map'>('table')
   const [adding, setAdding] = useState(false)
   const [newAddress, setNewAddress] = useState('')
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number | null; lng: number | null } | null>(null)
   const [newPrice, setNewPrice] = useState('')
   const [newSqft, setNewSqft] = useState('')
   const [loadingAdd, setLoadingAdd] = useState(false)
@@ -33,17 +34,25 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
     if (!newAddress.trim()) return
     setLoadingAdd(true)
     try {
-      // Added geocodeAddress so we get lat/lng for the Map view
-      const [amenities, distances, coords] = await Promise.all([
+      let coords = selectedCoords
+
+      const [amenities, distances] = await Promise.all([
         getNearbyAmenities(newAddress),
-        getWorkplaceDistances(newAddress, work1, work2),
-        geocodeAddress(newAddress)
+        getWorkplaceDistances(newAddress, work1, work2)
       ])
+
+      // Fallback to Google Geocoding only if LocationIQ didn't return coordinates
+      if (!coords) {
+        try {
+          coords = await geocodeAddress(newAddress)
+        } catch (e) {
+          console.error("Google geocoding fallback failed:", e)
+        }
+      }
       
       const autoData = { ...amenities, ...distances }
       const markerNum = properties.length + 1
       
-      // Override compiler with "as any" to force save custom UI properties like mapMarker
       await addRentProperty(locationId, {
         address: newAddress,
         price: newPrice ? Number(newPrice) : null,
@@ -67,6 +76,7 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
       setNewAddress('')
       setNewPrice('')
       setNewSqft('')
+      setSelectedCoords(null)
       setAdding(false)
     } catch (e) {
       console.error(e)
@@ -131,9 +141,15 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-medium text-gray-600 mb-1">Property Address *</label>
-            <input value={newAddress} onChange={e => setNewAddress(e.target.value)}
+            <AddressAutocomplete
+              value={newAddress}
+              onChange={(val) => setNewAddress(val)}
+              onSelect={(addr, lat, lng) => {
+                setNewAddress(addr)
+                setSelectedCoords({ lat, lng })
+              }}
               placeholder="123 Main St, Philadelphia, PA"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            />
           </div>
           <div className="w-32">
             <label className="block text-xs font-medium text-gray-600 mb-1">Monthly Rent ($)</label>
@@ -167,9 +183,9 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
                   ['sqft', 'Sqft'],
                   ['distanceWork1', 'Work 1'],
                   ['distanceWork2', 'Work 2'],
-                  ['costco', 'Costco'],              // Aligned with DB
-                  ['walmart', 'Walmart'],            // Aligned with DB
-                  ['indianStore', 'Indian Store'],   // Aligned with DB
+                  ['costco', 'Costco'],             
+                  ['walmart', 'Walmart'],            
+                  ['indianStore', 'Indian Store'],   
                 ].map(([key, label]) => (
                   <th key={key} onClick={() => handleSort(key as SortKey)} className="hover:bg-gray-200 cursor-pointer">
                     <div className="flex items-center gap-1">
