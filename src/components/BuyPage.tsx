@@ -36,20 +36,20 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
     setLoadingAdd(true)
     try {
       let coords = selectedCoords
+      
+      if (!coords) {
+        try {
+          coords = await geocodeAddress(newAddress)
+        } catch (e) {
+          console.error("Geocoding failed:", e)
+        }
+      }
 
       const [amenities, distances, propDetails] = await Promise.all([
         getNearbyAmenities(newAddress),
         getWorkplaceDistances(newAddress, work1, work2),
         getPropertyDetails(newAddress),
       ])
-      
-      if (!coords) {
-        try {
-          coords = await geocodeAddress(newAddress)
-        } catch (e) {
-          console.error("Geocoding fallback failed:", e)
-        }
-      }
       
       const autoData = { ...amenities, ...distances }
 
@@ -225,7 +225,6 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
                   <td>
                     <div className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 text-xs font-mono px-2 py-0.5 rounded-full border border-yellow-200 w-full">
                       <School size={10} className="shrink-0" />
-                      {/* FIXED: Added explicit object indexing check to bypass key validation strict checks */}
                       <InlineCell 
                         value={(p as any).schoolRating || (p as any).schoolRatings || '-/-/-'} 
                         onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { schoolRating: val })} 

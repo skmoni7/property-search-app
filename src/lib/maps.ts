@@ -152,8 +152,7 @@ export async function getDistanceToAddress(
 }
 
 /**
- * Find the nearest store using Google's reliable Text Search API.
- * This completely prevents failures caused by strict geolocation filters.
+ * Find the nearest store using strict Location Coordinates parameters
  */
 export async function findNearestStore(
   location: LatLng,
@@ -162,9 +161,8 @@ export async function findNearestStore(
 ): Promise<PlaceResult | null> {
   if (!GOOGLE_API_KEY) return null;
   try {
-    const cleanAddr = cleanAddressForAPIs(originAddress);
-    // Rebuilt using textsearch: combines keyword and clean location context seamlessly
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(storeKeyword + ' near ' + cleanAddr)}&location=${location.lat},${location.lng}&radius=50000&key=${GOOGLE_API_KEY}`;
+    // FIX: Pass explicit location coordinates and a wide 50,000 meter radius bias to force proximity calculation matching
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(storeKeyword)}&location=${location.lat},${location.lng}&radius=50000&key=${GOOGLE_API_KEY}`;
     
     const res = await fetch(url);
     const data = await res.json();

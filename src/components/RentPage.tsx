@@ -37,18 +37,18 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
     try {
       let coords = selectedCoords
 
-      const [amenities, distances] = await Promise.all([
-        getNearbyAmenities(newAddress),
-        getWorkplaceDistances(newAddress, work1, work2)
-      ])
-
       if (!coords) {
         try {
           coords = await geocodeAddress(newAddress)
         } catch (e) {
-          console.error("Geocoding fallback failed:", e)
+          console.error("Geocoding failed:", e)
         }
       }
+
+      const [amenities, distances] = await Promise.all([
+        getNearbyAmenities(newAddress),
+        getWorkplaceDistances(newAddress, work1, work2)
+      ])
       
       const autoData = { ...amenities, ...distances }
       const markerNum = properties.length + 1
@@ -204,7 +204,6 @@ export default function RentPage({ locationId, work1, work2 }: Props) {
                   <td><span className="marker-badge">{p.mapMarker}</span></td>
                   <td className="font-medium text-gray-800 max-w-xs truncate" title={p.address}>{p.address}</td>
                   
-                  {/* Editable Cells via InlineCell */}
                   <td className="text-green-700 font-semibold">
                     <InlineCell value={p.price} type="number" onSave={async (val) => await updateRentPropertyField(locationId, p.id!, { price: val ? Number(val) : null })} />
                   </td>
