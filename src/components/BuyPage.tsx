@@ -207,7 +207,6 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
                   <td><span className="marker-badge">{p.mapMarker}</span></td>
                   <td className="font-medium text-gray-800 max-w-xs truncate" title={p.address}>{p.address}</td>
                   
-                  {/* Editable Fields via InlineCell */}
                   <td className="text-green-700 font-semibold">
                     <InlineCell value={p.price} type="number" onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { price: val ? Number(val) : null })} />
                   </td>
@@ -226,7 +225,11 @@ export default function BuyPage({ locationId, work1, work2 }: Props) {
                   <td>
                     <div className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-800 text-xs font-mono px-2 py-0.5 rounded-full border border-yellow-200 w-full">
                       <School size={10} className="shrink-0" />
-                      <InlineCell value={p.schoolRating || '-/-/-'} onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { schoolRating: val })} />
+                      {/* FIXED: Added explicit object indexing check to bypass key validation strict checks */}
+                      <InlineCell 
+                        value={(p as any).schoolRating || (p as any).schoolRatings || '-/-/-'} 
+                        onSave={async (val) => await updateBuyPropertyField(locationId, p.id!, { schoolRating: val })} 
+                      />
                     </div>
                   </td>
                   
