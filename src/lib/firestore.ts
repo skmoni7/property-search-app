@@ -62,4 +62,54 @@ export async function updateBuyPropertyField(
     ...fields,
     [`manualOverrides.${Object.keys(fields)[0]}`]: true
   });
+export interface AmenityHeading {
+  id?: string;
+  title: string; // e.g., "Costco", "Indian Grocery", "Gyms"
+  createdAt?: unknown;
+}
+
+export interface AmenityPlace {
+  id?: string;
+  name: string; // e.g., "Costco Research Blvd"
+  address: string; // e.g., "10201 Research Blvd, Austin, TX"
+  lat: number | null;
+  lng: number | null;
+  createdAt?: unknown;
+}
+
+// --- CUSTOM AMENITY HEADINGS ---
+export async function addAmenityHeading(locationId: string, title: string): Promise<string> {
+  const ref = await addDoc(collection(db, 'locations', locationId, 'amenityHeadings'), {
+    title,
+    createdAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export function subscribeAmenityHeadings(locationId: string, callback: (headings: AmenityHeading[]) => void) {
+  const q = query(collection(db, 'locations', locationId, 'amenityHeadings'), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AmenityHeading))));
+}
+
+export async function deleteAmenityHeading(locationId: string, headingId: string): Promise<void> {
+  await deleteDoc(doc(db, 'locations', locationId, 'amenityHeadings', headingId));
+}
+
+// --- CUSTOM PLACES UNDER HEADINGS ---
+export async function addAmenityPlace(locationId: string, headingId: string, place: Omit<AmenityPlace, 'id'>): Promise<string> {
+  const ref = await addDoc(collection(db, 'locations', locationId, 'amenityHeadings', headingId, 'places'), {
+    ...place,
+    createdAt: serverTimestamp()
+  });
+  return ref.id;
+}
+
+export function subscribeAmenityPlaces(locationId: string, headingId: string, callback: (places: AmenityPlace[]) => void) {
+  const q = query(collection(db, 'locations', locationId, 'amenityHeadings', headingId, 'places'), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AmenityPlace))));
+}
+
+export async function deleteAmenityPlace(locationId: string, headingId: string, placeId: string): Promise<void> {
+  await deleteDoc(doc(db, 'locations', locationId, 'amenityHeadings', headingId, 'places', placeId));
+}  
 }
